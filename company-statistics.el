@@ -1,4 +1,4 @@
-;;; company-statistics.el --- history scoring using company-transformers
+;;; company-statistics.el --- sort candidates using completion history
 
 ;; Copyright (C) 2014  Free Software Foundation, Inc.
 
@@ -21,12 +21,10 @@
 
 
 ;;; Commentary:
-;; - backends decide on available candidates --- depends on prefix
-;; - we store how often a candidate is chosen --- independent of prefixes
-;; - for sorted candidates: stable sort keeps incoming order if same/no score
-;; - TODO add ert tests
-;; - TODO how to treat case, use backend's ignore-case?
-;; - TODO maybe later depend on the mode, file, project: all in score functions
+;; - backends decide on available candidates (depends on prefix)
+;; - we store how often a candidate is chosen (independent of prefixes)
+;; - challenge: same candidate in several modes/projects/files,
+;;   but with different meaning --- handled by context information
 
 ;;; Code:
 
@@ -42,7 +40,7 @@ As this is a global cache, making it too small defeats the purpose."
   :group 'company-statistics
   :type 'integer
   :initialize (lambda (option init-size) (setq company-statistics-size init-size))
-  :set 'company-statistics--history-resize)
+  :set 'company-statistics--log-resize)
 
 (defcustom company-statistics-file
   (concat user-emacs-directory "company-statistics-cache.el")
@@ -61,51 +59,65 @@ not been used before."
   :group 'company-statistics
   :type 'boolean)
 
+(defcustom company-statistics-score-change 'company-statistics-score-change-default
+  "Function called with completion choice.  Using arbitrary other info,
+it should produce an alist, each entry labeling a context and the
+associated score update: ((ctx-a . 1) (\"str\" . 0.5) (nil . 1)).  Nil is
+the global context."
+  :group 'company-statistics
+  :type 'function)
+
+(defcustom company-statistics-score-calc 'company-statistics-score-calc-default
+  "Function called with completion candidate.  Using arbitrary other info,
+eg, on the current context, it should evaluate to the candidate's score (a
+number)."
+  :group 'company-statistics
+  :type 'function)
+
 ;; internal vars, persistence
 
 (defvar company-statistics--scores nil
-  "Store selection frequency of candidates.")
+  "Store selection frequency of candidates in given contexts.")
 
-(defvar company-statistics--history nil
-  "Ring keeping the history of chosen candidates.")
+(defvar company-statistics--log nil
+  "Ring keeping a log of statistics updates.")
 
-(defvar company-statistics--history-replace nil
-  "Index into the completion history.")
+(defvar company-statistics--index nil
+  "Index into the log.")
 
 (defun company-statistics--init ()
   "Initialize company-statistics."
   (setq company-statistics--scores
         (make-hash-table :test 'equal :size company-statistics-size))
-  (setq company-statistics--history (make-vector company-statistics-size nil)
-        company-statistics--history-replace 0))
+  (setq company-statistics--log (make-vector company-statistics-size nil)
+        company-statistics--index 0))
 
 (defun company-statistics--initialized-p ()
   (hash-table-p company-statistics--scores))
 
-(defun company-statistics--history-resize (option new-size)
+(defun company-statistics--log-resize (option new-size)
   (when (company-statistics--initialized-p)
-    ;; hash scoresheet auto-resizes, but history does not
+    ;; hash scoresheet auto-resizes, but log does not
     (let ((new-hist (make-vector new-size nil))
-          ;; use actual length, to also work for freshly restored history
-          (company-statistics-size (length company-statistics--history)))
+          ;; use actual length, to also work for freshly restored stats
+          (company-statistics-size (length company-statistics--log)))
       ;; copy newest entries (possibly nil) to new-hist
       (dolist (i (number-sequence 0 (1- (min new-size company-statistics-size))))
-        (let ((old-i (mod (+ (- company-statistics--history-replace new-size) i)
+        (let ((old-i (mod (+ (- company-statistics--index new-size) i)
                           company-statistics-size)))
-          (aset new-hist i (aref company-statistics--history old-i))))
-      ;; remove discarded history (when shrinking) from scores
+          (aset new-hist i (aref company-statistics--log old-i))))
+      ;; remove discarded log entry (when shrinking) from scores
       (when (< new-size company-statistics-size)
         (dolist (i (number-sequence
-                    company-statistics--history-replace
+                    company-statistics--index
                     (+ company-statistics-size
-                       company-statistics--history-replace
+                       company-statistics--index
                        (1- new-size))))
-          (company-statistics--score-down
-           (aref company-statistics--history (mod i company-statistics-size)))))
-      (setq company-statistics--history new-hist)
-      (setq company-statistics--history-replace (if (<= new-size company-statistics-size)
-                                                    0
-                                                  company-statistics-size))))
+          (company-statistics--log-revert (mod i company-statistics-size))))
+      (setq company-statistics--log new-hist)
+      (setq company-statistics--index (if (<= new-size company-statistics-size)
+                                          0
+                                        company-statistics-size))))
   (setq company-statistics-size new-size))
 
 (defun company-statistics--save ()
@@ -117,8 +129,8 @@ not been used before."
         "%S"
         `(setq
           company-statistics--scores ,company-statistics--scores
-          company-statistics--history ,company-statistics--history
-          company-statistics--history-replace ,company-statistics--history-replace))))
+          company-statistics--log ,company-statistics--log
+          company-statistics--index ,company-statistics--index))))
     (write-file company-statistics-file)))
 
 (defun company-statistics--maybe-save ()
@@ -129,46 +141,100 @@ not been used before."
   "Restore statistics."
   (load company-statistics-file 'noerror nil 'nosuffix))
 
-;; score manipulation in one place
+;; score calculation for insert/retrieval --- can be changed on-the-fly
 
-(defun company-statistics--score-get (cand)
-  (gethash cand company-statistics--scores 0))
+(defun company-statistics-score-change-default (cand)
+  "Count for global score, mode context, filename context."
+  (nconc                                ;when's nil is removed
+   (list (cons nil 1) (cons major-mode 1)) ;major-mode is never nil
+   (when buffer-file-name
+     (list (cons buffer-file-name 1)))))
 
-(defun company-statistics--score-up (cand)
+(defun company-statistics-score-calc-default (cand)
+  "Global score, and bonus for matching major mode and filename."
+  (let ((scores (gethash cand company-statistics--scores)))
+    (if scores
+        (+ (cdr (assoc nil scores))
+           (or (cdr (assoc major-mode scores)) 0)
+           (or (cdr (when buffer-file-name ;to not get nil context
+                      (assoc buffer-file-name scores))) 0))
+      0)))
+
+;; score manipulation in one place --- know about hash value alist structure
+
+(defun company-statistics--alist-update (alist updates merger &optional filter)
+  "Return new alist with conses from ALIST.  Their cdrs are updated
+to (merger cdr update-cdr) if the UPDATES alist contains an entry with an
+equal-matching car.  If FILTER called with the result is non-nil, remove
+the cons from the result.  If no matching cons exists in ALIST, add the new
+one.  ALIST structure and cdrs may be changed!"
+  (let ((filter (or filter 'ignore))
+        (updated alist)
+        (new nil))
+    (mapc
+     (lambda (upd)
+       (let ((found (assoc (car upd) alist)))
+         (if found
+             (let ((result (funcall merger (cdr found) (cdr upd))))
+               (if (funcall filter result)
+                   (setq updated (delete found updated))
+                 (setcdr found result)))
+           (push upd new))))
+     updates)
+    (nconc updated new)))
+
+(defun company-statistics--scores-add (cand score-updates)
   (puthash cand
-           (1+ (company-statistics--score-get cand))
+           (company-statistics--alist-update
+            (gethash cand company-statistics--scores)
+            score-updates
+            '+)
            company-statistics--scores))
 
-(defun company-statistics--score-down (cand)
-  (when cand                            ;ignore nil
-    (let ((old-score (company-statistics--score-get cand)))
-      ;; on scoresheet, decrease corresponding score or remove entry
-      (if (> old-score 1)
-          (puthash cand (1- old-score) company-statistics--scores)
-        (remhash cand company-statistics--scores)))))
+(defun company-statistics--log-revert (&optional index)
+  "Revert score updates for log entry.  INDEX defaults to
+`company-statistics--index'."
+  (let ((hist-entry
+         (aref company-statistics--log
+               (or index company-statistics--index))))
+    (when hist-entry                    ;ignore nil entry
+      (let* ((cand (car hist-entry))
+             (score-updates (cdr hist-entry))
+             (new-scores
+              (company-statistics--alist-update
+               (gethash cand company-statistics--scores)
+               score-updates
+               '-
+               'zerop)))
+        (if new-scores                    ;sth left
+            (puthash cand new-scores company-statistics--scores)
+          (remhash cand company-statistics--scores))))))
 
-;; core functions: actual sorting transformer, statistics updater
+(defun company-statistics--log-store (result score-updates)
+  "Insert/overwrite result and associated score updates."
+  (aset company-statistics--log company-statistics--index
+        (cons result score-updates))
+  (setq company-statistics--index
+        (mod (1+ company-statistics--index) company-statistics-size)))
+
+;; core functions: updater, actual sorting transformer, minor-mode
+
+(defun company-statistics--finished (result)
+  "After completion, update scores and log."
+  (let* ((result (substring-no-properties result))
+         (score-updates (funcall company-statistics-score-change result)))
+    (company-statistics--scores-add result score-updates)
+    (company-statistics--log-revert)
+    (company-statistics--log-store result score-updates)))
 
 (defun company-sort-by-statistics (candidates)
-  "Sort candidates by historical statistics."
+  "Sort candidates by historical statistics.  Stable sort, so order is only
+changed for candidates distinguishable by score."
   (setq candidates
         (sort candidates
               (lambda (cand1 cand2)
-                (>  (company-statistics--score-get cand1)
-                    (company-statistics--score-get cand2))))))
-
-(defun company-statistics--finished (result)
-  "After completion, update scores and history."
-  (setq result (substring-no-properties result)) ;on the safe side
-  (company-statistics--score-up result)
-  ;; update cyclic completion history
-  (let ((replace-result
-         (aref company-statistics--history company-statistics--history-replace)))
-    (company-statistics--score-down replace-result)) ;void if nil
-  ;; insert new result
-  (aset company-statistics--history company-statistics--history-replace result)
-  (setq company-statistics--history-replace
-        (mod (1+ company-statistics--history-replace) company-statistics-size)))
+                (>  (funcall company-statistics-score-calc cand1)
+                    (funcall company-statistics-score-calc cand2))))))
 
 ;;;###autoload
 (define-minor-mode company-statistics-mode
@@ -189,7 +255,7 @@ configuration.  You can customize this behavior with
           (if company-statistics-auto-restore
               (progn
                 (company-statistics--load) ;maybe of different size
-                (company-statistics--history-resize nil company-statistics-size))
+                (company-statistics--log-resize nil company-statistics-size))
             (company-statistics--init)))
         (add-to-list 'company-transformers
                      'company-sort-by-statistics 'append)
