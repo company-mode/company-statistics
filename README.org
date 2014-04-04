@@ -6,7 +6,7 @@ of completions you choose, along with some context information, and use that to
 rank candidates the next time you have to choose --- hopefully showing you
 likelier candidates at the top of the list.
 ** Use It
-Using the package is simple.  With the files in your =load=path=, add to your
+Using the package is simple.  With the files in your =load-path=, add to your
 =init.el= file
 #+begin_src emacs-lisp
 (require 'company-statistics)
@@ -15,9 +15,10 @@ Using the package is simple.  With the files in your =load=path=, add to your
 to load the package and turn on the mode.  See the (few but powerful)
 customizable options for details =M-x customize-group company-statistics=.
 ** Design
-Company-statistics relies on company-mode (it works by adding a function to
-company-transformers), but is only loosely coupled to it.  It is designed with
-some flexibility in mind as for the recorded context information and the way
+Company-statistics is an add-on for company-mode, but is only loosely coupled to
+it (it works by adding a sorting function to =company-transformers= as well as a
+handler to =company-completion-finished-hook=).  It is designed with some
+flexibility in mind as for the recorded context information and the way
 candidates are scored: the default pair of functions are only examples!  The
 stats are automatically persistent between sessions.
 ** Have Fun!
