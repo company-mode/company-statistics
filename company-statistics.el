@@ -252,10 +252,10 @@ configuration.  You can customize this behavior with
   (if company-statistics-mode
       (progn
         (unless (company-statistics--initialized-p)
-          (if company-statistics-auto-restore
-              (progn
-                (company-statistics--load) ;maybe of different size
-                (company-statistics--log-resize nil company-statistics-size))
+          (if (and company-statistics-auto-restore
+                   (company-statistics--load))
+              ;; maybe of different size
+              (company-statistics--log-resize nil company-statistics-size)
             (company-statistics--init)))
         (add-to-list 'company-transformers
                      'company-sort-by-statistics 'append)
