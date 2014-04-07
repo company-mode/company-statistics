@@ -233,8 +233,10 @@ changed for candidates distinguishable by score."
   (setq candidates
         (sort candidates
               (lambda (cand1 cand2)
-                (>  (funcall company-statistics-score-calc cand1)
-                    (funcall company-statistics-score-calc cand2))))))
+                (>  (funcall company-statistics-score-calc
+                             (substring-no-properties cand1))
+                    (funcall company-statistics-score-calc
+                             (substring-no-properties cand2)))))))
 
 ;;;###autoload
 (define-minor-mode company-statistics-mode
