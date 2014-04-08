@@ -221,8 +221,8 @@ one.  ALIST structure and cdrs may be changed!"
 
 (defun company-statistics--finished (result)
   "After completion, update scores and log."
-  (let* ((result (substring-no-properties result))
-         (score-updates (funcall company-statistics-score-change result)))
+  (let* ((score-updates (funcall company-statistics-score-change result))
+         (result (substring-no-properties result)))
     (company-statistics--scores-add result score-updates)
     (company-statistics--log-revert)
     (company-statistics--log-store result score-updates)))
@@ -233,10 +233,8 @@ changed for candidates distinguishable by score."
   (setq candidates
         (sort candidates
               (lambda (cand1 cand2)
-                (>  (funcall company-statistics-score-calc
-                             (substring-no-properties cand1))
-                    (funcall company-statistics-score-calc
-                             (substring-no-properties cand2)))))))
+                (>  (funcall company-statistics-score-calc cand1)
+                    (funcall company-statistics-score-calc cand2))))))
 
 ;;;###autoload
 (define-minor-mode company-statistics-mode
