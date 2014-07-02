@@ -154,7 +154,8 @@ number)."
   "Global score, and bonus for matching major mode and filename."
   (let ((scores (gethash cand company-statistics--scores)))
     (if scores
-        (+ (cdr (assoc nil scores))
+        ;; cand may be in scores and still have no global score left
+        (+ (or (cdr (assoc nil scores)) 0)
            (or (cdr (assoc major-mode scores)) 0)
            (or (cdr (when buffer-file-name ;to not get nil context
                       (assoc buffer-file-name scores))) 0))
