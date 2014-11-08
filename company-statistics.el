@@ -1,10 +1,14 @@
-;;; company-statistics.el --- sort candidates using completion history
+;;; company-statistics.el --- Sort candidates using completion history
 
 ;; Copyright (C) 2014  Free Software Foundation, Inc.
 
-;; Author: Ingo Lohmar
+;; Author: Ingo Lohmar <i.lohmar@gmail.com>
+;; URL: https://github.com/company-mode/company-statistics
+;; Version: 0.1
+;; Keywords: abbrev, convenience, matching
+;; Package-Requires: ((emacs "24.3") (company "0.8.5"))
 
-;; This file is part of GNU Emacs.
+;; This file is not part of GNU Emacs.
 
 ;; GNU Emacs is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -19,12 +23,27 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with GNU Emacs.  If not, see <http://www.gnu.org/licenses/>.
 
-
 ;;; Commentary:
-;; - backends decide on available candidates (depends on prefix)
-;; - we store how often a candidate is chosen (independent of prefixes)
-;; - challenge: same candidate in several modes/projects/files,
-;;   but with different meaning --- handled by context information
+;;
+;; Package installed from gnu.elpa.org:
+;;
+;;   (add-hook 'after-init-hook 'company-statistics-mode)
+;;
+;; Manually installed: make sure that this file is in load-path, and
+;;
+;;   (require 'company-statistics)
+;;   (company-statistics-mode)
+;;
+;; Every time a candidate is chosen using company-mode, we keep track of this
+;; (for a limited amount of recent choices).  When presenting completion
+;; candidates next time, they are sorted according to the score thus acquired.
+;;
+;; The same candidate might occur in different modes, projects, files etc., and
+;; possibly has a different meaning each time.  Therefore along with the
+;; completion, we store some context information.  In the default configuration,
+;; we track the overall frequency, the major-mode of the buffer, and the
+;; filename (if it applies), and the same criteria are used to score all
+;; possible candidates.
 
 ;;; Code:
 
