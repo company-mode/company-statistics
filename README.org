@@ -8,7 +8,7 @@ likelier candidates at the top of the list.
 ** Use It
 Using the package is simple.
 
-If you install it from the gnu.elpa.org repository with Emacs' package manager,
+If you install it from the elpa.gnu.org repository with Emacs' package manager,
 you only need to enable the mode, e.g., in your =init.el= file:
 #+begin_src emacs-lisp
 (add-to-hook 'after-init-hook 'company-statistics-mode)
