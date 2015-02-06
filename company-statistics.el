@@ -4,7 +4,7 @@
 
 ;; Author: Ingo Lohmar <i.lohmar@gmail.com>
 ;; URL: https://github.com/company-mode/company-statistics
-;; Version: 0.1
+;; Version: 0.1.1
 ;; Keywords: abbrev, convenience, matching
 ;; Package-Requires: ((emacs "24.3") (company "0.8.5"))
 
@@ -153,7 +153,8 @@ number)."
     (write-file company-statistics-file)))
 
 (defun company-statistics--maybe-save ()
-  (when company-statistics-auto-save
+  (when (and (company-statistics--initialized-p)
+             company-statistics-auto-save)
     (company-statistics--save)))
 
 (defun company-statistics--load ()
