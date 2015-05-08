@@ -21,7 +21,7 @@
 
 
 ;;; Commentary:
-;; emacs -batch -L . -l ert -l company-statistics-tests.el  -f ert-run-tests-batch-and-exit
+;; emacs -batch -L . -L ../company-mode/ -l ert -l company-statistics-tests.el  -f ert-run-tests-batch-and-exit
 
 ;;; Code:
 
@@ -77,16 +77,25 @@ V2 (starting at index I2) satisfy the binary predicate PRED, default
        (let ((company-statistics-size 5))
          (company-statistics--init)
          (let ((major-mode 'foo-mode)
-               (buffer-file-name nil))
+               (company-statistics--context
+                '((:keyword "if")
+                  (:symbol "parent")
+                  (:file "foo-file"))))
            (company-statistics--finished "foo"))
          (let ((major-mode 'foo-mode)
-               (buffer-file-name "bar-file"))
+               (company-statistics--context
+                '((:symbol "statistics")
+                  (:file "bar-file"))))
            (company-statistics--finished "bar"))
          (let ((major-mode 'baz-mode)
-               (buffer-file-name nil))
+               (company-statistics--context
+                '((:keyword "unless")
+                  (:symbol "company"))))
            (company-statistics--finished "baz"))
          (let ((major-mode 'baz-mode)
-               (buffer-file-name "quux-file"))
+               (company-statistics--context
+                '((:keyword "when")
+                  (:file "quux-file"))))
            (company-statistics--finished "quux"))
          ,@body)
      ;; tear down to clean slate
@@ -155,43 +164,82 @@ V2 (starting at index I2) satisfy the binary predicate PRED, default
       (should (equal company-statistics--log cs-history))
       (should (equal company-statistics--index cs-index))))))
 
-(ert-deftest c-s-score-change-default ()
+(ert-deftest c-s-score-change-light ()
   "Test a few things about the default score updates."
-  (let ((major-mode 'foobar-mode)
-        (buffer-file-name nil))         ;must not generate context entries
-    (should (equal (company-statistics-score-change-default "dummy")
-                   '((nil . 1) (foobar-mode . 1))))
-    (let ((buffer-file-name "test-file.XYZ"))
-      (should (equal (company-statistics-score-change-default "dummy")
-                     '((nil . 1) (foobar-mode . 1) ("test-file.XYZ" . 1)))))))
+  (let ((major-mode 'foobar-mode))
+    (should (equal (company-statistics-score-change-light "dummy")
+                   '((nil . 1) (foobar-mode . 1))))))
 
-(ert-deftest c-s-score-calc-default ()
+(ert-deftest c-s-score-calc-light ()
   "Test score calculation default."
   (cs-fixture
+   ;; FIXME assumes that light context is a subset of the heavy context?
+   (let ((major-mode 'foo-mode))
+     (should (eq (company-statistics-score-calc-light "foo") 2))
+     (should (eq (company-statistics-score-calc-light "bar") 2))
+     (should (eq (company-statistics-score-calc-light "baz") 1))
+     (should (eq (company-statistics-score-calc-light "quux") 1)))
+   (let ((major-mode 'baz-mode))
+     (should (eq (company-statistics-score-calc-light "foo") 1))
+     (should (eq (company-statistics-score-calc-light "bar") 1))
+     (should (eq (company-statistics-score-calc-light "baz") 2))
+     (should (eq (company-statistics-score-calc-light "quux") 2)))))
+
+(ert-deftest c-s-score-change-heavy ()
+  "Test a few things about the heavy score updates."
+  (let ((major-mode 'foobar-mode))
+    (should (equal (company-statistics-score-change-heavy "dummy")
+                   '((nil . 1) (foobar-mode . 1))))
+    (let ((company-statistics--context
+           '((:keyword "kwd")
+             nil                        ;deliberately omit parent symbol
+             (:file "test-file.XYZ"))))
+      (should (equal (company-statistics-score-change-heavy "dummy")
+                     '((nil . 1) (foobar-mode . 1)
+                       ((:keyword "kwd") . 1)
+                       ((:file "test-file.XYZ") . 1)))))))
+
+(ert-deftest c-s-score-calc-heavy ()
+  "Test heavy score calculation."
+  (cs-fixture
    (let ((major-mode 'foo-mode)
-         (buffer-file-name nil))
-     (should (eq (company-statistics-score-calc-default "foo") 2))
-     (should (eq (company-statistics-score-calc-default "bar") 2))
-     (should (eq (company-statistics-score-calc-default "baz") 1))
-     (should (eq (company-statistics-score-calc-default "quux") 1)))
+         (company-statistics--context
+          '((:symbol "company")
+            (:file "foo-file"))))
+     (should (eq (company-statistics-score-calc-heavy "dummy") 0))
+     (should (eq (company-statistics-score-calc-heavy "foo") 3))
+     (should (eq (company-statistics-score-calc-heavy "bar") 2))
+     (should (eq (company-statistics-score-calc-heavy "baz") 2))
+     (should (eq (company-statistics-score-calc-heavy "quux") 1)))
    (let ((major-mode 'foo-mode)
-         (buffer-file-name "bar-file"))
-     (should (eq (company-statistics-score-calc-default "foo") 2))
-     (should (eq (company-statistics-score-calc-default "bar") 3))
-     (should (eq (company-statistics-score-calc-default "baz") 1))
-     (should (eq (company-statistics-score-calc-default "quux") 1)))
+         (company-statistics--context
+          '((:keyword "unless")
+            (:symbol "parent")
+            (:file "quux-file"))))
+     (should (eq (company-statistics-score-calc-heavy "dummy") 0))
+     (should (eq (company-statistics-score-calc-heavy "foo") 3))
+     (should (eq (company-statistics-score-calc-heavy "bar") 2))
+     (should (eq (company-statistics-score-calc-heavy "baz") 2))
+     (should (eq (company-statistics-score-calc-heavy "quux") 2)))
    (let ((major-mode 'baz-mode)
-         (buffer-file-name nil))
-     (should (eq (company-statistics-score-calc-default "foo") 1))
-     (should (eq (company-statistics-score-calc-default "bar") 1))
-     (should (eq (company-statistics-score-calc-default "baz") 2))
-     (should (eq (company-statistics-score-calc-default "quux") 2)))
+         (company-statistics--context
+          '((:keyword "when")
+            (:file "baz-file"))))
+     (should (eq (company-statistics-score-calc-heavy "dummy") 0))
+     (should (eq (company-statistics-score-calc-heavy "foo") 1))
+     (should (eq (company-statistics-score-calc-heavy "bar") 1))
+     (should (eq (company-statistics-score-calc-heavy "baz") 2))
+     (should (eq (company-statistics-score-calc-heavy "quux") 3)))
    (let ((major-mode 'baz-mode)
-         (buffer-file-name "quux-file"))
-     (should (eq (company-statistics-score-calc-default "foo") 1))
-     (should (eq (company-statistics-score-calc-default "bar") 1))
-     (should (eq (company-statistics-score-calc-default "baz") 2))
-     (should (eq (company-statistics-score-calc-default "quux") 3)))))
+         (company-statistics--context
+          '((:keyword "if")
+            (:symbol "statistics")
+            (:file "quux-file"))))
+     (should (eq (company-statistics-score-calc-heavy "dummy") 0))
+     (should (eq (company-statistics-score-calc-heavy "foo") 2))
+     (should (eq (company-statistics-score-calc-heavy "bar") 2))
+     (should (eq (company-statistics-score-calc-heavy "baz") 2))
+     (should (eq (company-statistics-score-calc-heavy "quux") 3)))))
 
 (ert-deftest c-s-alist-update ()
   "Test central helper function for context/score alist update."
