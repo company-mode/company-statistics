@@ -1,6 +1,6 @@
-;;; company-statistics.el --- Sort candidates using completion history
+;;; company-statistics.el --- Sort candidates using completion history  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2014  Free Software Foundation, Inc.
+;; Copyright (C) 2014-2015  Free Software Foundation, Inc.
 
 ;; Author: Ingo Lohmar <i.lohmar@gmail.com>
 ;; URL: https://github.com/company-mode/company-statistics
@@ -27,7 +27,7 @@
 ;;
 ;; Package installed from elpa.gnu.org:
 ;;
-;;   (add-hook 'after-init-hook 'company-statistics-mode)
+;;   (add-hook 'after-init-hook #'company-statistics-mode)
 ;;
 ;; Manually installed: make sure that this file is in load-path, and
 ;;
@@ -56,47 +56,40 @@
 (defcustom company-statistics-size 400
   "Number of completion choices that `company-statistics' keeps track of.
 As this is a global cache, making it too small defeats the purpose."
-  :group 'company-statistics
   :type 'integer
-  :initialize (lambda (option init-size) (setq company-statistics-size init-size))
-  :set 'company-statistics--log-resize)
+  :initialize #'custom-initialize-default
+  :set #'company-statistics--log-resize)
 
 (defcustom company-statistics-file
   (concat user-emacs-directory "company-statistics-cache.el")
   "File to save company-statistics state."
-  :group 'company-statistics
   :type 'string)
 
 (defcustom company-statistics-auto-save t
   "Whether to save the statistics when leaving emacs."
-  :group 'company-statistics
   :type 'boolean)
 
 (defcustom company-statistics-auto-restore t
   "Whether to restore statistics when company-statistics is enabled and has
 not been used before."
-  :group 'company-statistics
   :type 'boolean)
 
-(defcustom company-statistics-capture-context 'company-statistics-capture-context-heavy
+(defcustom company-statistics-capture-context #'company-statistics-capture-context-heavy
   "Function called with single argument (t if completion started manually).
 This is the place to store any context information for a completion run."
-  :group 'company-statistics
   :type 'function)
 
-(defcustom company-statistics-score-change 'company-statistics-score-change-heavy
+(defcustom company-statistics-score-change #'company-statistics-score-change-heavy
   "Function called with completion choice.  Using arbitrary other info,
 it should produce an alist, each entry labeling a context and the
 associated score update: ((ctx-a . 1) (\"str\" . 0.5) (nil . 1)).  Nil is
 the global context."
-  :group 'company-statistics
   :type 'function)
 
-(defcustom company-statistics-score-calc 'company-statistics-score-calc-heavy
+(defcustom company-statistics-score-calc #'company-statistics-score-calc-heavy
   "Function called with completion candidate.  Using arbitrary other info,
 eg, on the current context, it should evaluate to the candidate's score (a
 number)."
-  :group 'company-statistics
   :type 'function)
 
 ;; internal vars, persistence
@@ -113,7 +106,7 @@ number)."
 (defun company-statistics--init ()
   "Initialize company-statistics."
   (setq company-statistics--scores
-        (make-hash-table :test 'equal :size company-statistics-size))
+        (make-hash-table :test #'equal :size company-statistics-size))
   (setq company-statistics--log (make-vector company-statistics-size nil)
         company-statistics--index 0))
 
@@ -286,7 +279,7 @@ one.  ALIST structure and cdrs may be changed!"
            (company-statistics--alist-update
             (gethash cand company-statistics--scores)
             score-updates
-            '+)
+            #'+)
            company-statistics--scores))
 
 (defun company-statistics--log-revert (&optional index)
@@ -302,8 +295,8 @@ one.  ALIST structure and cdrs may be changed!"
               (company-statistics--alist-update
                (gethash cand company-statistics--scores)
                score-updates
-               '-
-               'zerop)))
+               #'-
+               #'zerop)))
         (if new-scores                    ;sth left
             (puthash cand new-scores company-statistics--scores)
           (remhash cand company-statistics--scores))))))

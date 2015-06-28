@@ -1,6 +1,6 @@
-;;; company-statistics-tests.el --- company-statistics tests
+;;; company-statistics-tests.el --- company-statistics tests  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2014  Free Software Foundation, Inc.
+;; Copyright (C) 2014-2015  Free Software Foundation, Inc.
 
 ;; Author: Ingo Lohmar
 
