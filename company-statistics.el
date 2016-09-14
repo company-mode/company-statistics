@@ -141,15 +141,18 @@ number)."
 (defun company-statistics--save ()
   "Save statistics."
   (with-temp-buffer
+    (set-buffer-multibyte nil)
     (let (print-level print-length)
-      (insert
+      (encode-coding-string
        (format
         "%S"
         `(setq
           company-statistics--scores ,company-statistics--scores
           company-statistics--log ,company-statistics--log
-          company-statistics--index ,company-statistics--index))))
-    (write-file company-statistics-file)))
+          company-statistics--index ,company-statistics--index))
+       'utf-8 nil (current-buffer))
+      (let ((coding-system-for-write 'binary))
+        (write-region nil nil company-statistics-file)))))
 
 (defun company-statistics--maybe-save ()
   (when (and (company-statistics--initialized-p)
