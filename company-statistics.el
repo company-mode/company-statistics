@@ -140,7 +140,7 @@ number)."
 
 (defun company-statistics--save ()
   "Save statistics."
-  (with-temp-buffer
+  (with-temp-file company-statistics-file
     (let (print-level print-length)
       (insert
        (format
@@ -148,8 +148,7 @@ number)."
         `(setq
           company-statistics--scores ,company-statistics--scores
           company-statistics--log ,company-statistics--log
-          company-statistics--index ,company-statistics--index))))
-    (write-file company-statistics-file)))
+          company-statistics--index ,company-statistics--index))))))
 
 (defun company-statistics--maybe-save ()
   (when (and (company-statistics--initialized-p)
