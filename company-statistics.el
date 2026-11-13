@@ -142,6 +142,7 @@ number)."
   "Save statistics."
   (with-temp-buffer
     (set-buffer-multibyte nil)
+    (insert ";;; -*- lexical-binding: t -*-\n")
     (let (print-level print-length)
       (encode-coding-string
        (format
